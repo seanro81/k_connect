@@ -172,6 +172,16 @@ services:
    command: postgres -c config_file=/etc/postgresql/postgresql.conf
    networks:
      - proxynet
+ app:
+   build:
+     context: ./app
+   ports:
+     - "9000:9000"
+   depends_on:
+     - postgres
+   networks:
+     - proxynet
+
 
 networks:
  proxynet:

@@ -1,57 +1,38 @@
+import asyncio
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, Response
+from contextlib import asynccontextmanager
 
-from jinja2 import Template
+from adapters.pg import SimpleORM
+from adapters.kafka import consumer
+from utils.promethius import json_to_prometheus
 
-import sys
-import asyncio
-
-
-# Структура для хранения информации о работнике
-employees = [
-    {
-        "FullName": "Александр Смирнов",
-        "Salaries": [50000, 52000, 54000, 55000],
-    },
-    {
-        "FullName": "Екатерина Петрова",
-        "Department": "Маркетинг",
-        "Salaries": [60000, 62000, 64000, 65000],
-    },
-]
-
-# Шаблон для отображения информации о работниках
-employee_template = """
-{% for employee in employees %}
-Работник: {{ employee.FullName }}{% if employee.Department %} / Отдел: {{ employee.Department }}{% endif %}
-Выплаченная зарплата: {% for salary in employee.Salaries %}{{ salary }} {% endfor %}
-{% endfor %}
-"""
+from settings.config import logging,APP_PORT
 
 app = FastAPI()
 
 
 @app.get("/metrics")
-def metrics():
-    # Создание шаблона
-    tmpl = Template(employee_template)
-
-    # Выполнение шаблона и вывод результата
+async def metrics():
     try:
-        output = tmpl.render(employees=employees)
-        print(output)
+        orm = SimpleORM()
+        data_json = await orm.metrics_get(metric_id='all')
+        output = await json_to_prometheus(json_str=data_json)
     except Exception as e:
-        print(f"Ошибка при выполнении шаблона: {e}", file=sys.stderr)
-        sys.exit(1)
-    return output
+        msg = f"/metrics: Ошибка выполнения: {str(e)}"
+        logging.error(msg)
+        return Response(content=msg, status_code=500, media_type="application/xml")
+    return Response(content=output, status_code=200, media_type="application/xml")
 
-#https://www.geeksforgeeks.org/mediator-method-python-design-pattern/
 
 @app.on_event("startup")
-async def kafka_consume():
+async def startup():
+    orm = SimpleORM()
+    await orm.migration()
     loop = asyncio.get_event_loop()
-    asyncio.run_coroutine_threadsafe(consumer_modify_(loop), loop)
+    asyncio.run_coroutine_threadsafe(consumer(), loop)
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=9000)

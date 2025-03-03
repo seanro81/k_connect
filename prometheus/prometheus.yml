@@ -33,5 +33,5 @@ scrape_configs:
 
   - job_name: 'my_service'
     static_configs:
-        - targets: [ 'localhost:8080' ]
+        - targets: [ 'app:9000' ]
     metrics_path: '/metrics'
